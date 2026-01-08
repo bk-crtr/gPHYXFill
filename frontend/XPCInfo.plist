@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>gPHYX Fill v2.29</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.gphyx.FillEffect.xpc</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.29</string>
+	<key>CFBundleVersion</key>
+	<string>2.29</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>PlugInKit</key>
+	<dict>
+		<key>Attributes</key>
+		<dict>
+			<key>com.apple.protocol</key>
+			<string>FxPlug</string>
+			<key>com.apple.version</key>
+			<string>4.0</string>
+		</dict>
+		<key>PrincipalClass</key>
+		<string>FxPrincipal</string>
+		<key>Protocol</key>
+		<string>PROXPCProtocol</string>
+	</dict>
+	<key>ProPlugDictionaryVersion</key>
+	<string>1.0</string>
+	<key>ProPlugDynamicRegistration</key>
+	<false/>
+	<key>ProPlugPlugInGroupList</key>
+	<array>
+		<dict>
+			<key>groupName</key>
+			<string>gPHYX Fill v2.29</string>
+			<key>uuid</key>
+			<string>89B85167-3579-42EA-9123-5A7F155E64C0</string>
+		</dict>
+	</array>
+	<key>ProPlugPlugInList</key>
+	<array>
+		<dict>
+			<key>className</key>
+			<string>gPHYXFillEffect</string>
+			<key>displayName</key>
+			<string>gPHYX Fill v2.29</string>
+			<key>group</key>
+			<string>89B85167-3579-42EA-9123-5A7F155E64C0</string>
+			<key>infoString</key>
+			<string>Hybrid Inpainting &amp; Tracking Tool</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxFilter</string>
+				<string>FxAnalyzer</string>
+			</array>
+			<key>uuid</key>
+			<string>7088C7B4-B963-4E43-B64C-7D6AC367AA38</string>
+			<key>version</key>
+			<string>2.29</string>
+		</dict>
+		<dict>
+			<key>className</key>
+			<string>gPHYXOsc</string>
+			<key>displayName</key>
+			<string>gPHYX Fill OSC v2.29</string>
+			<key>infoString</key>
+			<string>OSC for gPHYX Fill</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxOnScreenControl_v4</string>
+			</array>
+			<key>uuid</key>
+			<string>27D4B032-8EC6-43F7-87AF-CF0B7D7EAEE3</string>
+			<key>version</key>
+			<string>2.29</string>
+		</dict>
+	</array>
+	<key>XPCService</key>
+	<dict>
+		<key>JoinExistingSession</key>
+		<true/>
+		<key>RunLoopType</key>
+		<string>_NSApplicationMain</string>
+		<key>ServiceType</key>
+		<string>Application</string>
+		<key>_AdditionalSubServices</key>
+		<dict>
+			<key>viewbridge</key>
+			<true/>
+		</dict>
+	</dict>
+</dict>
+</plist>

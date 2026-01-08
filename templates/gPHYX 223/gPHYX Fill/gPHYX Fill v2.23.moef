@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE ozxmlscene>
+<ozml version="5.13">
+    <displayversion>5.7</displayversion>
+    <factory id="1" uuid="F88A17F8-ADE3-4261-8C13-2F0660E23360">
+        <description>gPHYX Fill v2.23</description>
+        <manufacturer>gPHYX</manufacturer>
+        <version>2.23</version>
+    </factory>
+    <project name="gPHYX Fill v2.23" width="1920" height="1080" duration="300" fps="30">
+        <scene>
+            <layer name="Effect Layer">
+                <filter id="10000" factoryID="1" pluginUUID="F88A17F8-ADE3-4261-8C13-2F0660E23360" pluginVersion="2.23" pluginDynamicParams="1">
+                    <parameter id="1" name="Reference Frame" flags="8589934592" default="0" value="0"></parameter>
+                    <parameter id="2" name="Initialize Reference" flags="8589934592" default="0" value="0"></parameter>
+                    <parameter id="10" name="Track Motion" flags="8589934592" default="0" value="0"></parameter>
+                    <parameter id="11" name="Clear Mask" flags="8589934592" default="0" value="0"></parameter>
+                    <parameter id="12" name="Show Mask / OSC" flags="8589934592" default="1" value="1"></parameter>
+                    <parameter id="13" name="Generate Fill" flags="8589934592" default="0" value="0"></parameter>
+                    <parameter id="25" name="Fit ROI to Surface" flags="8589934592" default="0" value="0"></parameter>
+                </filter>
+            </layer>
+        </scene>
+        <publishSettings>
+            <version>2</version>
+            <target object="10000" channel="./1" name="Reference Frame"></target>
+            <target object="10000" channel="./2" name="Initialize Reference"></target>
+            <target object="10000" channel="./10" name="Track Motion"></target>
+            <target object="10000" channel="./11" name="Clear Mask"></target>
+            <target object="10000" channel="./12" name="Show Mask / OSC"></target>
+            <target object="10000" channel="./13" name="Generate Fill"></target>
+            <target object="10000" channel="./25" name="Fit ROI to Surface"></target>
+        </publishSettings>
+    </project>
+</ozml>

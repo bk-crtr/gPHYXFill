@@ -1,0 +1,261 @@
+Архитектурная парадигма FxPlug 4 на Apple Silicon: Исчерпывающее техническое руководство по разработке, отладке и развертыванию в условиях отсутствия Developer ID
+1. Введение: Эволюционный разрыв и новая реальность разработки видеоприложений
+Индустрия профессионального видеопроизводства на платформе macOS переживает один из самых фундаментальных технологических сдвигов за последние два десятилетия. Одновременный переход аппаратной части на архитектуру Apple Silicon (семейство чипов M1, M2, M3, M4) и программной модели расширений на изолированную архитектуру FxPlug 4 создал беспрецедентный комплекс проблем для разработчиков и интеграторов.1 Ранее тривиальные задачи — компиляция плагина, его установка в системную директорию и запуск хост-приложения (Final Cut Pro, Motion) — трансформировались в многоступенчатые процессы, требующие глубокого понимания механизмов межпроцессного взаимодействия (XPC), политик безопасности ядра macOS (Kernel Security Policy) и нюансов файловых систем.
+Данный отчет представляет собой исчерпывающий технический анализ и пошаговое руководство, предназначенное для решения критических проблем совместимости и функциональности плагинов FxPlug 4. Документ структурирован таким образом, чтобы покрыть весь жизненный цикл проблемы: от низкоуровневой диагностики невидимости плагина в подсистеме PlugInKit до реализации сложных графических интерфейсов (OSC) и обхода ограничений подписи кода в средах разработки без активного Apple Developer ID.3
+1.1. Архитектурный диссонанс: FxPlug 3 против FxPlug 4
+Для понимания корня технических проблем необходимо детально разобрать архитектурные различия. В эпоху FxPlug 3 (и ранее) плагин представлял собой динамически загружаемую библиотеку (bundle), которая инжектировалась непосредственно в адресное пространство хост-приложения (например, Final Cut Pro). Это обеспечивало минимальные задержки при вызове функций и прямой доступ к памяти хоста, но создавало фатальную уязвимость: любая ошибка сегментации или утечка памяти в плагине приводила к аварийному завершению работы всего видеоредактора.3
+FxPlug 4 внедряет концепцию «Out-of-Process» (внепроцессного исполнения). Теперь плагин — это автономный XPC-сервис, работающий в собственном адресном пространстве и изолированный песочницей (App Sandbox). Взаимодействие с хостом происходит через сериализованные сообщения.
+Характеристика
+FxPlug 3 (Legacy)
+FxPlug 4 (Modern)
+Влияние на разработку
+Исполнение
+In-Process (Внутри хоста)
+Out-of-Process (XPC Service)
+Сбои плагина не убивают FCP; требуется IPC.
+Доступ к памяти
+Прямой (Shared pointers)
+Изолированный (IOSurface)
+Необходимость использования IOSurface для передачи текстур.
+Потоковая модель
+Синхронная/Асинхронная
+Асинхронная (Требует thread-safety)
+Игнорирование флагов kFxPropertyKey_IsThreadSafe.
+Отрисовка UI
+В окне хоста (Cocoa/Carbon)
+ViewBridge (Remote View)
+Сложности с отрисовкой кастомных окон и инспекторов.
+Безопасность
+Права хоста
+Строгий Sandbox
+Обязательные entitlements для доступа к файлам.
+Этот сдвиг объясняет, почему старые методы отладки и параметры Info.plist, работавшие годами, внезапно перестали функционировать. Система больше не "доверяет" плагину по умолчанию; плагин должен доказать свое право на существование и взаимодействие через строгие контракты безопасности.6
+1.2. Императив Apple Silicon и Rosetta 2
+На архитектуре Apple Silicon выполнение кода регулируется жестче, чем на Intel. Ядро macOS на ARM64 требует, чтобы каждая страница исполняемой памяти была подписана.7 Это делает невозможным запуск неподписанного кода (unsigned code execution), который часто использовался при внутренней разработке на Intel. Даже для локальной отладки требуется так называемая "ad-hoc" подпись — криптографический хэш без цепочки доверия сертификационному центру, но валидный для локального ядра.4
+Final Cut Pro версии 10.6.6 и выше полностью прекратил поддержку FxPlug 3 на нативном уровне. При запуске на Apple Silicon хост-приложение сканирует плагины и, обнаружив архитектуру x86_64 или старый протокол FxPlug 3, блокирует их загрузку, выводя предупреждение о несовместимости.1 Использование эмуляции Rosetta 2 (запуск хоста через arch -x86_64) может временно решить проблему для старых бинарных файлов, но это тупиковый путь для новой разработки, так как FxPlug 4 оптимизирован под Metal и нативную производительность.2
+2. Диагностика невидимости: PlugInKit и Launch Services
+Ситуация, когда скомпилированный плагин отсутствует в браузере эффектов Motion или Final Cut Pro, является наиболее распространенной критической ошибкой. В FxPlug 4 механизм обнаружения (Discovery) кардинально изменился. Плагины больше не являются пассивными файлами в папке /Library/Plug-Ins/FxPlug; они являются активными расширениями, регистрируемыми системным демоном pkd (PlugInKit Daemon).9
+2.1. Механизм регистрации и утилита pluginkit
+Основой диагностики видимости плагина является утилита командной строки pluginkit. Она взаимодействует с базой данных Launch Services и позволяет верифицировать статус регистрации XPC-сервиса.
+Если плагин не отображается в хосте, первым шагом разработчик должен выполнить аудит регистрации:
+
+Bash
+
+
+# Вывод списка всех зарегистрированных плагинов FxPlug с детальной информацией pluginkit -mv -p FxPlug 
+В выводе этой команды необходимо искать Bundle Identifier вашего плагина. Возможные сценарии и их интерпретация представлены в таблице ниже:
+Статус вывода pluginkit
+Диагноз
+Вероятная причина и действие
+Плагин отсутствует
+Система не знает о существовании бандла.
+Бандл не был проиндексирован Launch Services. Требуется запустить Wrapper Application или принудительно зарегистрировать через lsregister.
+Плагин присутствует, путь верный
+Регистрация успешна, но хост отвергает плагин.
+Ошибка валидации подписи, неверная архитектура (отсутствие arm64 slice), ошибки в Info.plist (см. раздел 2.2), или проблемы с Motion Template.
+Плагин присутствует, путь неверный
+Конфликт дубликатов.
+Система ссылается на старую копию (в Trash, Downloads или Xcode Build folder). Требуется очистка базы данных Launch Services.
+Статус "busy" или ошибки
+Демон PlugInKit завис или сбой XPC.
+Ошибки в коде инициализации FxPrincipal. Проверьте системный лог (Console.app).
+Принудительная перерегистрация:
+Часто при разработке (build-run цикле) система кэширует старую версию плагина. Для сброса кэша и принудительного обнаружения используйте следующую последовательность команд 6:
+
+Bash
+
+
+# Удаление явной регистрации (если есть) pluginkit -r /path/to/YourPlugin.app/Contents/PlugIns/YourExtension.appex  # Добавление явной регистрации pluginkit -a /path/to/YourPlugin.app/Contents/PlugIns/YourExtension.appex 
+2.2. Анатомия Info.plist: Критические ключи для FxPlug 4
+Файл Info.plist внутри XPC-сервиса (расширения) является контрактом между плагином и хостом. В FxPlug 4 набор обязательных ключей изменился, и документация Apple не всегда явно подсвечивает эти изменения в контексте миграции. Отсутствие или неверный тип данных (например, String вместо Boolean) в одном из ключей приведет к "тихому" отказу в загрузке.3
+Обязательная конфигурация XPC Service:
+Внутри словаря NSExtension (или корневого словаря для старых структур, но для FxPlug 4 строго рекомендуется NSExtension):
+	•	NSExtensionPointIdentifier: Должен быть строго равен com.apple.FxPlug. Любое отклонение приведет к игнорированию плагина.
+	•	NSExtensionPrincipalClass: Имя вашего класса-наследника NSObject, реализующего протокол FxPrincipal. Это точка входа.
+	•	XPCService Dictionary:
+	•	RunLoopType: Значение _NSApplication. Это критически важно. По умолчанию XPC-сервисы используют NSRunLoop, но FxPlug-плагинам требуется полный цикл событий приложения (NSApplication) для корректной обработки UI, событий мыши и взаимодействия с viewbridge.5 Если этот ключ отсутствует или установлен неверно, плагин может загрузиться, но не отрисовывать UI или падать при попытке открыть Inspector.
+	•	JoinExistingSession: Значение YES (<true/>). Позволяет плагину присоединяться к сессии GUI пользователя, что необходимо для отрисовки интерфейса.
+	•	_AdditionalSubServices: Словарь, содержащий ключ viewbridge со значением YES. Это недокументированный, но обязательный ключ для работы механизма удаленного отображения (Remote View) параметров в Инспекторе FCP.6
+Устаревшие ключи, подлежащие удалению:
+При миграции с FxPlug 3 необходимо удалить ключи EmbeddedCode и EmbeddedProtocol из Info.plist. Их наличие может вызвать конфликты в логике загрузчика FxPlug 4.5 Также следует убедиться, что ключ ProPlugDictionaryVersion актуализирован, хотя в чистых FxPlug 4 проектах он часто заменяется стандартными механизмами NSExtension.
+2.3. Проблема "Wrapper Application" и структуры бандла
+FxPlug 4 плагин не распространяется как "голый" файл .fxplug или .plugin. Он должен быть упакован внутри стандартного приложения macOS (Wrapper Application). Структура должна быть следующей:
+MyEffect.app (Wrapper Application)
+└── Contents
+├── MacOS
+│ └── MyEffect (Executable - пустышка, просто запускает регистрацию)
+├── PlugIns
+│ └── MyEffect.pluginkit (XPC Service, расширение.appex)
+│ ├── Contents
+│ │ ├── MacOS
+│ │ │ └── MyEffect (Бинарный код плагина)
+│ │ ├── Info.plist (Конфигурация XPC)
+│ │ └── Resources (Шейдеры, UI, иконки)
+└── Resources...
+Хост-приложение (FCP) ищет расширения внутри PlugIns папки приложений. Если вы пытаетесь положить "голый" XPC сервис в /Library/Plug-Ins/FxPlug без обертки, современные версии macOS могут отказать в регистрации из-за политик безопасности. Рекомендованный путь развертывания — установка Wrapper App в /Applications или, для совместимости, копирование Wrapper App в /Library/Plug-Ins/FxPlug (хотя это и не стандартное место для .app, оно поддерживается исторически).3
+3. Motion Templates и связующая XML-логика
+Даже идеально скомпилированный и зарегистрированный FxPlug 4 не появится в Final Cut Pro сам по себе. FCP работает исключительно с шаблонами Motion (.moef, .motn, .moti, .motr). Шаблон служит "контейнером", который сообщает FCP, какой именно FxPlug нужно загрузить.9
+3.1. Структура директорий и локализация (.localized)
+Файловая система macOS использует механизм локализации имен папок, и Final Cut Pro жестко завязан на него при сканировании шаблонов. Ошибка в именовании папок — самая тривиальная, но частая причина "невидимости".
+Путь к шаблону должен строго соответствовать иерархии:
+~/Movies/Motion Templates.localized/[Тип].localized/[Категория]/[Название шаблона]/
+Где [Тип] — это одна из четырех папок:
+	•	Effects.localized (Эффекты)
+	•	Generators.localized (Генераторы)
+	•	Titles.localized (Титры)
+	•	Transitions.localized (Переходы)
+Суффикс .localized обязателен в имени папки на диске, но может быть скрыт в Finder. Если вы создаете структуру папок вручную (без инсталлятора), вы должны убедиться, что расширение присутствует. Кроме того, часто требуется наличие пустого файла .localized внутри самой папки для корректной работы Finder, хотя FCP сканирует именно имя директории.14
+3.2. Синхронизация UUID: Священный Грааль совместимости
+Внутри файла шаблона (например, MyEffect.moef), который является XML-файлом, находится тег <filter> или <ozml>, содержащий атрибут uuid.
+
+XML
+
+
+<filter name="My FxPlug Filter" id="1" uuid="12345678-ABCD-1234-EF00-1234567890AB">    ... </filter> 
+Этот UUID является уникальным ключом связывания. При загрузке шаблона FCP опрашивает все зарегистрированные FxPlug-плагины через PlugInKit, запрашивая: "Кто из вас обслуживает UUID 12345678-ABCD-1234-EF00-1234567890AB?".
+Критическая проблема: Если вы пересоздали проект в Xcode или сгенерировали новый UUID в коде плагина, но не обновили XML-файл шаблона (или наоборот), FCP покажет "Красный экран с восклицательным знаком" (Missing Effect).
+Алгоритм синхронизации:
+	•	В коде плагина (обычно в методе properties или в Info.plist словаре ProPlugDynamicRegistration) найдите возвращаемый UUID.
+	•	Откройте .moef файл в текстовом редакторе.
+	•	Убедитесь, что UUID совпадают байт-в-байт.
+	•	Если вы используете Motion для создания шаблона, убедитесь, что при сохранении проекта выбран правильный FxPlug из списка. Motion автоматически прописывает UUID в XML при сохранении.16
+3.3. Параметры публикации
+Проблема: "Плагин работает в Motion, но параметры не видны в FCP".
+Решение: В архитектуре Motion Template параметры плагина не появляются в FCP автоматически. В редакторе Motion необходимо:
+	•	Выбрать примененный к объекту фильтр/плагин.
+	•	В инспекторе нажать правой кнопкой на нужный параметр (например, "Brightness").
+	•	Выбрать "Publish" (Опубликовать). Только опубликованные параметры записываются в XML-структуру шаблона и становятся доступными для рендеринга GUI в Final Cut Pro.18
+4. Глубокий анализ API параметров: addParametersWithError
+Переход на FxPlug 4 принес значительные изменения в API создания параметров. Многие разработчики сталкиваются с тем, что их код компилируется без ошибок, но параметры не появляются в инспекторе, или плагин падает при инициализации.
+4.1. Игнорирование флагов и CMTime
+В FxPlug 3 использовались флаги kFxPropertyKey_IsThreadSafe и kFxPropertyKey_UsesRationalTime для указания возможностей плагина. В FxPlug 4 эти флаги полностью игнорируются.3
+	•	Thread Safety: FxPlug 4 по дизайну асинхронен и многопоточен. Разработчик обязан обеспечить потокобезопасность. Если ваш код использует глобальные статические переменные для хранения состояния, это приведет к гонкам данных (Race Conditions) и визуальным артефактам, так как методы рендеринга могут вызываться одновременно для разных кадров (Multi-frame rendering).
+	•	Time Management: Использование FxTime (double) устарело. Весь API переведен на CMTime (Core Media Time). Это обеспечивает точную синхронизацию кадров без ошибок округления плавающей запятой. Все методы, принимающие время, теперь требуют структуру CMTime.
+4.2. Реализация addParametersWithError
+Метод addParametersWithError: является единственной точкой входа для определения интерфейса.
+Типичная ошибка: Использование ID параметров за пределами допустимого диапазона. FxPlug резервирует ID 0. Пользовательские параметры должны иметь ID в диапазоне ****. Использование ID > 9998 или отрицательных значений приведет к тому, что addFloatSlider... вернет NO, и параметр не будет создан.19
+Пример корректной реализации (Objective-C):
+
+Objective-C
+
+
+- (BOOL)addParametersWithError:(NSError * _Nullable * _Nullable)error {     id<FxParameterCreationAPI_v5> paramAPI = [_apiManager apiForProtocol:@protocol(FxParameterCreationAPI_v5)];          if (!paramAPI) {         if (error) {             *error =;         }         return NO;     }      // Создание слайдера с проверкой ID     BOOL success =;          if (!success) {         // Логирование ошибки критично для диагностики         NSLog(@"FxPlug Error: Failed to add parameter with ID 1");         return NO;     }          return YES; } 
+4.3. Динамическое обновление параметров
+Метод parameterChanged:atTime:error: позволяет реагировать на изменения. Однако, изменение структуры параметров (скрытие/показ) в реальном времени в FCP работает с ограничениями. В отличие от Motion, FCP кэширует структуру инспектора. Для принудительного обновления флагов (например, kFxParameterFlag_HIDDEN) требуется использовать FxParameterSettingAPI, и изменения могут примениться не мгновенно.6
+5. Восстановление On-Screen Controls (OSC) и Интерактивности
+On-Screen Controls (экранные элементы управления) в FxPlug 4 претерпели наиболее болезненную трансформацию из-за архитектуры XPC. Раньше плагин мог рисовать прямо в OpenGL контекст окна Viewer. Теперь отрисовка происходит удаленно, а события мыши транслируются через границы процессов.
+5.1. Протокол FxOnScreenControl_v4
+Для работы OSC необходимо реализовать протокол FxOnScreenControl_v4. Использование старых версий (_v3 и ниже) на Apple Silicon приведет к тому, что методы просто не будут вызываться.20
+Ключевые методы:
+	•	drawOSCWithWidth:height:activePart:activeWindow:pluginState:atTime:error:: Основной метод отрисовки.
+	•	getOSCWidth:height:activePart:activeWindow:pluginState:atTime:error:: Метод для возврата размеров активной области управления.
+Проблема "Красного Экрана" (Red Screen in Viewer):
+Если при активации OSC экран Viewer заливается красным, это сигнал о критической ошибке внутри метода отрисовки OSC. Часто это связано с тем, что плагин не возвращает валидный объект изображения или падает при попытке доступа к неинициализированным данным pluginState.6
+5.2. Координатные пространства и мышь
+В FxPlug 4 координаты мыши передаются относительно окна Viewer, но отрисовка часто требует преобразования в координаты изображения (Image Space). API предоставляет методы convertPointToImageSpace: и convertPointfromImageSpace:.
+При обработке событий мыши (mouseDownAt:, mouseDraggedAt:) необходимо учитывать, что activeWindow может быть nil в некоторых контекстах рендеринга. Всегда проверяйте валидность объектов перед использованием.
+Сетевые аспекты (OSC Network Protocol):
+Если ваш плагин использует сетевой протокол OSC (Open Sound Control) для внешнего управления (например, через TouchOSC), необходимо помнить о Sandbox. XPC-сервис по умолчанию не имеет доступа к сети. Вы должны добавить entitlements:
+	•	com.apple.security.network.client
+	•	com.apple.security.network.server Иначе попытка открыть UDP сокет приведет к ошибке EPERM (Operation not permitted).21
+6. Безопасность и Sandboxing: Работа в жестких условиях
+macOS на Apple Silicon возводит безопасность в абсолют. XPC-сервисы обязаны работать в песочнице (Sandbox), иначе система может их терминировать.
+6.1. Обязательные Entitlements
+Файл .entitlements для XPC-сервиса должен содержать минимальный набор прав:
+
+Entitlement Key
+Значение
+Описание
+com.apple.security.app-sandbox
+true
+Обязательно. Включает песочницу. Без этого XPC может не запуститься. 23
+com.apple.security.inherit
+true
+Наследует права хоста. Позволяет использовать доступ к файлам, разрешенным пользователем для FCP. 23
+com.apple.security.files.user-selected.read-only
+true
+Разрешает чтение файлов, выбранных пользователем через NSOpenPanel.
+com.apple.security.files.bookmarks.app-scope
+true
+Разрешает сохранение Security-Scoped Bookmarks (для доступа к файлам между сессиями). 24
+6.2. Временные исключения (Temporary Exceptions)
+Если вашему плагину критически необходим доступ к файлам по абсолютным путям (например, глобальные настройки в /Library/Application Support/), и вы не можете использовать стандартные механизмы контейнеров, можно использовать временные исключения.
+Пример: com.apple.security.temporary-exception.files.absolute-path.read-write.
+Предупреждение: Apple не рекомендует использовать исключения. В Mac App Store такие приложения будут отклонены. Однако для Ad-hoc распространения это рабочий метод обхода ограничений.26
+7. Работа без Developer ID: Протокол "Ad-Hoc" на Apple Silicon
+Это наиболее сложный аспект для независимых разработчиков. На архитектуре x86_64 можно было запустить неподписанный бинарник, отключив Gatekeeper. На ARM64 (Apple Silicon) ядро операционной системы требует наличие валидной подписи у каждой страницы кода перед исполнением.7
+7.1. Концепция Ad-Hoc подписи
+Ad-Hoc подпись (Sign to Run Locally в Xcode) — это криптографическая подпись, которая не привязана к доверенному сертификату Apple, но создает корректный хэш структуры файла (cdhash). Это удовлетворяет требование ядра ("код целостен"), но не удовлетворяет Gatekeeper ("код доверен").
+7.2. Процедура подписи и "De-quarantine"
+Для успешного запуска плагина с Ad-Hoc подписью на чужой машине необходимо выполнить два условия:
+	•	Подписать код: Bash codesign --force --deep --sign - /path/to/YourWrapper.app  (Дефис - означает ad-hoc подпись).
+	•	Удалить атрибут карантина (The Quarantine Flag): Когда файл скачивается из интернета или копируется через AirDrop, macOS вешает на него атрибут com.apple.quarantine. Gatekeeper видит этот атрибут, проверяет подпись, видит, что она Ad-Hoc (не доверена Apple), и блокирует выполнение. Для запуска необходимо удалить этот атрибут после копирования плагина на целевую машину.27 Bash # Рекурсивное удаление карантина с приложения-обертки sudo xattr -r -d com.apple.quarantine /Applications/YourWrapper.app  # И, что критически важно, с самого плагина внутри sudo xattr -r -d com.apple.quarantine /Applications/YourWrapper.app/Contents/PlugIns/YourPlugin.pluginkit 
+Если этого не сделать, плагин будет молчаливо проигнорирован PlugInKit, так как XPC-сервис не сможет запуститься из-за блокировки политикой безопасности.7
+8. Пошаговая инструкция по исправлению (Remediation Workflow)
+Для систематического решения проблем используйте следующий алгоритм.
+Этап 1: Санитарная обработка окружения
+	•	Закройте Final Cut Pro и Motion.
+	•	Удалите все копии вашего плагина из /Library/Plug-Ins/FxPlug, ~/Library/Plug-Ins/FxPlug и /Applications.
+	•	Очистите базу данных Launch Services: Bash /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user 
+	•	Перезагрузите компьютер. Это сбросит демона pkd и кэши путей.
+Этап 2: Конфигурация проекта Xcode
+	•	Проверьте Info.plist XPC-сервиса: RunLoopType = _NSApplication, JoinExistingSession = YES.
+	•	Проверьте Entitlements: com.apple.security.app-sandbox = YES, com.apple.security.inherit = YES.
+	•	В Build Settings установите Enable Hardened Runtime = NO (для Ad-hoc это часто упрощает жизнь, если не нужна нотаризация).
+	•	Убедитесь, что Mach-O Type для XPC установлен в Executable (или Bundle, но проверьте шаблон FxPlug 4).
+	•	Проверьте Runpath Search Paths (@rpath):
+	•	Host App: @loader_path/../Frameworks
+	•	XPC: @loader_path/../../../../Frameworks (путь к фреймворкам обертки).11
+Этап 3: Сборка и Подпись
+	•	Скомпилируйте проект (Product -> Build).
+	•	Если нет Developer ID, выберите "Sign to Run Locally" в настройках Signing.
+	•	Вручную проверьте подпись XPC-сервиса: Bash codesign -dvvv --entitlements - /path/to/BuiltApp.app/Contents/PlugIns/Extension.appex  Убедитесь, что в выводе есть флаги flags=0x2(adhoc) (если ad-hoc) или валидный идентификатор.
+Этап 4: Развертывание и Регистрация
+	•	Скопируйте Wrapper.app в /Applications.
+	•	Запустите приложение двойным кликом. Это инициирует регистрацию в Launch Services.
+	•	Если вы распространяете плагин (даже внутри студии), выполните команду xattr -r -d com.apple.quarantine для всего бандла.
+	•	Проверьте видимость: pluginkit -m -p FxPlug | grep "ВашID".
+Этап 5: Интеграция Motion Template
+	•	Убедитесь, что файл .moef находится в ~/Movies/Motion Templates.localized/Effects.localized/....
+	•	Откройте .moef и сверьте UUID с тем, что в вашем плагине.
+	•	Запустите Final Cut Pro.
+Этап 6: Отладка "в поле"
+Если плагин все еще не работает:
+	•	Откройте Console.app.
+	•	В поиске введите имя вашего процесса (XPC).
+	•	Нажмите "Start Streaming".
+	•	Попытайтесь добавить эффект в FCP.
+	•	Ищите сообщения:
+	•	Library Validation failed -> Проблема с подписью зависимых фреймворков. Все dylib должны быть подписаны тем же сертификатом (или ad-hoc), что и основной бандл.27
+	•	Service exited with abnormal code: 1 -> Крэш при инициализации. Возможно, addParametersWithError вернул NO.
+	•	System Policy: deny(1) file-read-data -> Проблема с Sandbox Entitlements.
+9. Заключение
+Разработка под FxPlug 4 на Apple Silicon — это упражнение в дисциплине соблюдения системных контрактов. Эпоха "хаков" и прямого доступа к памяти прошла. Успешная интеграция требует строгого следования протоколам XPC, корректной настройки прав доступа (Entitlements) и понимания механизмов подписи кода. Следуя данному руководству, разработчик может гарантировать стабильную работу своих инструментов в современной экосистеме Apple, обеспечивая производительность и безопасность, ожидаемую профессиональными пользователями.
+Источники
+	•	Popup When Launching FCPX - Final Cut Pro X and Motion 5 Special Effects , Plugins, Transitions and Themes - Pixel Film Studios, дата последнего обращения: января 5, 2026, https://store.pixelfilmstudios.com/popup-when-launching-fcpx/
+	•	Are your plugins compatible with Apple Silicon (M1/M2/M3/M4) computers?, дата последнего обращения: января 5, 2026, https://help.motionvfx.com/en/articles/5496234-are-your-plugins-compatible-with-apple-silicon-m1-m2-m3-m4-computers
+	•	Building an FxPlug plug-in manually | Apple Developer Documentation, дата последнего обращения: января 5, 2026, https://developer.apple.com/documentation/professional-video-applications/building-an-fxplug-plug-in-manually
+	•	Create an ad hoc provisioning profile (iOS, tvOS, watchOS) - Apple Developer, дата последнего обращения: января 5, 2026, https://developer.apple.com/help/account/provisioning-profiles/create-an-ad-hoc-provisioning-profile/
+	•	Migrating FxPlug 3 plug-ins to FxPlug 4 | Apple Developer Documentation, дата последнего обращения: января 5, 2026, https://developer.apple.com/documentation/professional-video-applications/migrating-fxplug-3-plug-ins-to-fxplug-4
+	•	FxPlug - FCP Cafe, дата последнего обращения: января 5, 2026, https://fcp.cafe/developers/fxplug/
+	•	Apple Platform Security, дата последнего обращения: января 5, 2026, https://help.apple.com/pdf/security/en_AU/apple-platform-security-guide-x.pdf
+	•	is it possible to generate an .IPA without an Apple Developer license? : r/jailbreak - Reddit, дата последнего обращения: января 5, 2026, https://www.reddit.com/r/jailbreak/comments/1gyiwhe/is_it_possible_to_generate_an_ipa_without_an/
+	•	Developer Documentation issue with FxPlug4 with Downloaded SDK and Xcode · CommandPost FCPCafe · Discussion #322 - GitHub, дата последнего обращения: января 5, 2026, https://github.com/CommandPost/FCPCafe/discussions/322
+	•	FxPlug unfindable by FCPX / Motion once moved - Bug Reports - Vuo Community, дата последнего обращения: января 5, 2026, https://community.vuo.org/t/fxplug-unfindable-by-fcpx-motion-once-moved/7200
+	•	Working with FxPlug Application Bundles - Apple Developer, дата последнего обращения: января 5, 2026, https://developer.apple.com/library/archive/documentation/AppleApplications/Conceptual/FXPlug_overview/BundlingAndInstalling/BundlingAndInstalling.html
+	•	Editing property lists for FxPlug plug-ins | Apple Developer ..., дата последнего обращения: января 5, 2026, https://developer.apple.com/documentation/professional-video-applications/editing-property-lists-for-fxplug-plug-ins
+	•	FCPX/Motion Template Compatibility Guide - FCPXTemplates.com, дата последнего обращения: января 5, 2026, https://fcpxtemplates.com/fcpx-motion-compatibility/
+	•	Where are Final Cut Pro templates saved in Motion? - Apple Support, дата последнего обращения: января 5, 2026, https://support.apple.com/guide/motion/where-are-templates-saved-motn141bd88c/mac
+	•	Creating and exploring the Motion Templates Folder in Final Cut Pro to install plug-ins, дата последнего обращения: января 5, 2026, https://www.youtube.com/watch?v=SsetjpIh_0s
+	•	User Manual (PDF) - Vuo, дата последнего обращения: января 5, 2026, https://vuo.org/manual.pdf
+	•	Feather edges - Apple Support Communities, дата последнего обращения: января 5, 2026, https://discussions.apple.com/thread/250078622
+	•	Can't find correct FCPX Motion Templates folder : r/VideoEditing - Reddit, дата последнего обращения: января 5, 2026, https://www.reddit.com/r/VideoEditing/comments/16mcnha/cant_find_correct_fcpx_motion_templates_folder/
+	•	Adding parameters to plug-ins | Apple Developer Documentation, дата последнего обращения: января 5, 2026, https://developer.apple.com/documentation/professional-video-applications/adding-parameters-to-plug-ins
+	•	Creating Onscreen Controls - Apple Developer, дата последнего обращения: января 5, 2026, https://developer.apple.com/library/archive/documentation/AppleApplications/Conceptual/FXPlug_overview/OnScreenControls/OnScreenControls.html
+	•	Troubleshooting OSC - Creative Conners Docs, дата последнего обращения: января 5, 2026, https://docs.creativeconners.com/docs/spikemark-6/show-control/osc/troubleshooting
+	•	Osc not working? : r/SlimeVR - Reddit, дата последнего обращения: января 5, 2026, https://www.reddit.com/r/SlimeVR/comments/1mxnj3q/osc_not_working/
+	•	Enabling App Sandbox - Apple Developer, дата последнего обращения: января 5, 2026, https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/EnablingAppSandbox.html
+	•	Accessing files from the macOS App Sandbox | Apple Developer Documentation, дата последнего обращения: января 5, 2026, https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox
+	•	App Sandboxing, XPC Services and different entitlements - Stack Overflow, дата последнего обращения: января 5, 2026, https://stackoverflow.com/questions/21010613/app-sandboxing-xpc-services-and-different-entitlements
+	•	News Archive - FCP Cafe, дата последнего обращения: января 5, 2026, https://fcp.cafe/news-archive/
+	•	Do Ventura's signature checks work? - The Eclectic Light Company, дата последнего обращения: января 5, 2026, https://eclecticlight.co/2023/03/07/do-venturas-signature-checks-work/

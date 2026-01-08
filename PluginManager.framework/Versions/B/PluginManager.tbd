@@ -1,0 +1,42 @@
+{
+  "main_library": {
+    "current_versions": [
+      {
+        "version": "44000.1.2"
+      }
+    ],
+    "exported_symbols": [
+      {
+        "data": {
+          "global": [
+            "_PluginManagerVersionString",
+            "_PluginManagerVersionNumber"
+          ]
+        }
+      }
+    ],
+    "flags": [
+      {
+        "attributes": [
+          "not_app_extension_safe"
+        ]
+      }
+    ],
+    "install_names": [
+      {
+        "name": "@rpath/PluginManager.framework/Versions/B/PluginManager"
+      }
+    ],
+    "target_info": [
+      {
+        "min_deployment": "11.0",
+        "target": "x86_64-macos"
+      },
+      {
+        "min_deployment": "11.0",
+        "target": "arm64-macos"
+      }
+    ]
+  },
+  "tapi_tbd_version": 5
+}

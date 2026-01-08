@@ -1,0 +1,41 @@
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+*.xcworkspace/*
+!*.xcworkspace/xcshareddata/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+
+# Build artifacts
+build/
+*.app
+*.pluginkit
+*.dSYM
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.swp
+*.swo
+*~
+.#*
+
+# Logs
+*.log
+Вывод*.log
+Вывод*.md
+
+# Test files
+check_api.m
+reset_and_install*.sh
+install_from_template.sh
+
+# Documentation (temporary)
+Как пофиксить*.md

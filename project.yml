@@ -1,0 +1,92 @@
+name: gPHYXFill
+options:
+  bundleIdPrefix: com.gphyx
+targets:
+  gPHYXFill:
+    type: application
+    platform: macOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: frontend/AppMain.m
+      - path: frontend/AppInfo.plist
+    settings:
+      INFOPLIST_FILE: frontend/AppInfo.plist
+      CODE_SIGN_ENTITLEMENTS: frontend/App.entitlements
+      CODE_SIGN_IDENTITY: "Apple Development"
+      DEVELOPMENT_TEAM: "NM74G59H9M"
+      PRODUCT_BUNDLE_IDENTIFIER: com.gphyx.FillEffect.wrapper
+    postBuildScripts:
+      - script: ${PROJECT_DIR}/Scripts/restructure_fxplug.sh
+        name: Restructure FxPlug Bundle
+        shell: /bin/bash
+    dependencies:
+      - target: gPHYXFillXPC
+        embed: true
+        relationship: dependency
+      - target: gPHYXEditor
+        embed: true
+        relationship: dependency
+
+  gPHYXFillXPC:
+    type: xpc-service
+    platform: macOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: frontend/main.m
+      - path: frontend/gPHYXVisionTracker.swift
+      - path: frontend/InpaintKernel.metal
+      - path: frontend/OscKernel.metal
+      - path: frontend/gPHYXFillEffect.mm
+      - path: frontend/gPHYXFillEffect.h
+      - path: frontend/gPHYXOsc.mm
+      - path: frontend/gPHYXOsc.h
+      - path: frontend/gPHYXClient.mm
+      - path: frontend/gPHYXClient.h
+      - path: frontend/XPCInfo.plist
+    settings:
+      INFOPLIST_FILE: frontend/XPCInfo.plist
+      WRAPPER_EXTENSION: pluginkit
+      CODE_SIGN_ENTITLEMENTS: frontend/XPC.entitlements
+      CODE_SIGN_IDENTITY: "Apple Development"
+      DEVELOPMENT_TEAM: "NM74G59H9M"
+      PRODUCT_BUNDLE_IDENTIFIER: com.gphyx.FillEffect.xpc
+      SWIFT_VERSION: "5.10"
+      SWIFT_OBJC_INTEROP_MODE: objcxx
+      OTHER_SWIFT_FLAGS: -cxx-interoperability-mode=default
+      SWIFT_OBJC_BRIDGING_HEADER: frontend/gPHYXFillXPC-Bridging-Header.h
+      CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES: YES
+      FRAMEWORK_SEARCH_PATHS: 
+        - $(PROJECT_DIR)
+        - $(inherited)
+      HEADER_SEARCH_PATHS:
+        - $(PROJECT_DIR)/FxPlug.framework/Headers
+        - $(inherited)
+      OTHER_LDFLAGS: -framework FxPlug -framework PluginManager -framework CoreGraphics -framework Cocoa
+    dependencies:
+      - framework: FxPlug.framework
+        embed: false
+      - framework: PluginManager.framework
+        embed: false
+      - sdk: CoreGraphics.framework
+      - sdk: Cocoa.framework
+
+  gPHYXEditor:
+    type: application
+    platform: macOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: editor
+    settings:
+      INFOPLIST_FILE: editor/Info.plist
+      PRODUCT_BUNDLE_IDENTIFIER: com.gphyx.FillEffect.editor
+      SWIFT_VERSION: "5.10"
+      CODE_SIGN_ENTITLEMENTS: editor/Editor.entitlements
+      CODE_SIGN_IDENTITY: "Apple Development"
+      DEVELOPMENT_TEAM: "NM74G59H9M"
+      OTHER_LDFLAGS: -framework Foundation -framework AppKit -framework SwiftUI -framework AVFoundation -framework Vision
+    dependencies:
+      - sdk: Foundation.framework
+      - sdk: AppKit.framework
+      - sdk: SwiftUI.framework
+      - sdk: AVFoundation.framework
+      - sdk: Vision.framework

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>gPHYXFillXPC</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.gphyx.FillEffect229.fxplug</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>gPHYX Fill</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.29</string>
+	<key>CFBundleVersion</key>
+	<string>2.29</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 gPHYX Labs. All rights reserved.</string>
+	<key>NSPrincipalClass</key>
+	<string>gPHYXFillPlugIn</string>
+	<key>PlugInKit</key>
+	<dict>
+		<key>Attributes</key>
+		<dict>
+			<key>com.apple.protocol</key>
+			<string>FxPlug</string>
+		</dict>
+		<key>PrincipalClass</key>
+		<string>FxPrincipal</string>
+		<key>Protocol</key>
+		<string>PROXPCProtocol</string>
+		<key>Subsystems</key>
+		<array>
+			<string>NSViewService_PKSubsystem</string>
+		</array>
+	</dict>
+	<key>ProPlugDictionaryVersion</key>
+	<string>1.0</string>
+	<key>ProPlugDynamicRegistration</key>
+	<false/>
+	<key>ProPlugPlugInGroupList</key>
+	<array>
+		<dict>
+			<key>groupName</key>
+			<string>gPHYX</string>
+			<key>uuid</key>
+			<string>89B85167-3579-42EA-9123-5A7F155E64C0</string>
+		</dict>
+	</array>
+	<key>ProPlugPlugInList</key>
+	<array>
+		<dict>
+			<key>className</key>
+			<string>gPHYXFillEffect</string>
+			<key>displayName</key>
+			<string>gPHYX Fill v2.29</string>
+			<key>group</key>
+			<string>89B85167-3579-42EA-9123-5A7F155E64C0</string>
+			<key>infoString</key>
+			<string>Hybrid Inpainting &amp; Tracking Tool</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxFilter</string>
+			</array>
+			<key>uuid</key>
+			<string>7088C7B4-B963-4E43-B64C-7D6AC367AA38</string>
+			<key>version</key>
+			<string>2.29</string>
+		</dict>
+	</array>
+</dict>
+</plist>

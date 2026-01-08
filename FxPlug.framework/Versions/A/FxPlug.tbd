@@ -1,0 +1,70 @@
+{
+  "main_library": {
+    "compatibility_versions": [
+      {
+        "version": "3"
+      }
+    ],
+    "current_versions": [
+      {
+        "version": "44000.1.12"
+      }
+    ],
+    "exported_symbols": [
+      {
+        "data": {
+          "global": [
+            "_kKeyChar_RightArrow",
+            "_kFxRect_Empty",
+            "_FxPlugErrorDomain",
+            "_kKeyChar_UpArrow",
+            "_kFxRect_Infinite",
+            "_kKey_Command",
+            "_kKeyChar_LeftArrow",
+            "_kKey_Character",
+            "_kKeyChar_DownArrow",
+            "_kKey_Modifiers"
+          ],
+          "objc_class": [
+            "FxTaggedMenuEntry",
+            "FxImageTileRequest",
+            "FxImageTile",
+            "FxPrincipal",
+            "FxMatrix44"
+          ],
+          "objc_ivar": [
+            "FxMatrix44._mat"
+          ]
+        },
+        "text": {
+          "global": [
+            "_FxRectsAreEqual"
+          ]
+        }
+      }
+    ],
+    "flags": [
+      {
+        "attributes": [
+          "not_app_extension_safe"
+        ]
+      }
+    ],
+    "install_names": [
+      {
+        "name": "@rpath/FxPlug.framework/Versions/A/FxPlug"
+      }
+    ],
+    "target_info": [
+      {
+        "min_deployment": "11.0",
+        "target": "x86_64-macos"
+      },
+      {
+        "min_deployment": "11.0",
+        "target": "arm64-macos"
+      }
+    ]
+  },
+  "tapi_tbd_version": 5
+}
